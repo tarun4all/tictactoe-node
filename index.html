@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+</head>
+<body>
+
+<script>
+    var socket = io();
+
+    function connect() {
+        let params = {};
+        params.username = document.getElementById('un').value;
+        params.sid = socket.id;
+        socket.emit('user', params);
+        
+    }
+
+    socket.on('turn', function(msg){
+        console.log(msg);
+    });
+
+    socket.on('start', function(msg){
+        alert('second user connected');
+    });
+
+</script>
+    <div style="margin-top:25px">
+        <center>
+            <input type="text" id="un" placeholder="enter username">
+            <button onclick="connect()">connect</button>
+        </center>
+    </div>
+</body>
+</html>
