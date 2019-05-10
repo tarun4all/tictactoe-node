@@ -1,72 +1,64 @@
-var app = require('express')();
+const express = require("express");
+const app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
-var count = 0;
-var users = {};
+var glob = require('./config/global');
 
-const bodyParser = require("body-parser");
-app.use(bodyParser.urlencoded({ extended: false }));
+//loading controller's function
+const usersController = require("./controllers/user");
+const gameController = require("./controllers/gameActivity");
 
-// parse application/json
-app.use(bodyParser.json());
+app.use(express.static("public"));
 
-app.get('/', function (req, res) {
+app.get('/', function(req, res) {
     res.sendFile(__dirname + '/index.html');
 });
 
-io.on('connection', function (socket) {
-
-    socket.on('user', function (params) {
-        console.log(params);
-        var result = user(params);
-        io.emit('turn', result ===2 ? 'lets match' : result);
-        if (result === 2) { 
-            socket.to(users[params.username].users[0].sid).emit('start', '1');
+io.on('connection', function(socket) {
+    //users connection
+    socket.on('room', function(room) {
+        console.log('here',room);
+        if (room) {
+            let params = {username : room.username, sid : room.sid};
+            let result = usersController.add(params);
+            console.log(result);
+            if (result.code == '2') {
+                socket.join(room.username);
+                io.sockets.in(room.username).emit('turn', result);
+            } else if (result.code == '1') {
+                socket.join(room.username);
+                socket.emit('turn', {code : 101, msg : `Waiting for oponent` });
+            } else if (result.code == '3') {
+                socket.emit('turn', {code : 102, msg : `Username is busy in another match` });
+            }
+        } else {
+            socket.emit('turn', {code : 102, msg : `Username can't be blank` });
         }
-        console.log(users['tarun'].users[0].sid);
     });
 
-    socket.on('disconnect', function () {
-        console.log('user disconnected');
+    socket.on('match', function(params) {
+        console.log(params);
+        if (typeof params == 'object' && Object.keys(params).length > 0) {
+            if (params.turn && params.type && params.player) {
+                let result = gameController.swap(params.turn, params.type, params.player);
+                if (result.code == '1') {
+                    io.sockets.in(params.player).emit('game', result);
+                } else if (result.code == '2') {
+                    console.log(result);
+                    io.sockets.in(params.player).emit('game', {code : '2', msg : `${result.win} won` });
+                } else if (result.code == '102') {
+                    socket.emit('game', {code : 102, msg : `invalid params` });
+                }
+            } else {
+                socket.emit('game', {code : 102, msg : `invalid params` });
+            }
+        } else {
+            socket.emit('game', {code : 102, msg : `invalid params` });
+        }
     });
-
 });
 
-function user(params) {
-    let a = params.username;
-    let found = Object.keys(users).indexOf(a);
-    if (found >= 0) {
-        let numOfUser = users[a].users.length;
-        if (numOfUser >= 2) {
-            return "user is busy";
-        } else if (numOfUser === 0) {
-            users[a].users[0] = {val:0, turn:1, sid: params.sid};
-            return  "registered succesfully Waiting for next user";
-        } else if (numOfUser === 1) {
-            users[a].users[1] = { val: 1, turn: 0, sid: params.sid };
-            return 2;
-        }
-    } else {
-        users[a] = { users: [{ val: 0, turn: 1, sid:params.sid }] };
-        return "registered succesfully Waiting for next user";
-    }
-}
-
-
-function remove(username, a) {
-    let found = users[username].users.findIndex(function (k) {
-        return k.sid === a
-    });
-    if (found > -1) {
-        found === 0 ? users[username].users.shift() : users[username].users.pop();
-        return "user went offline";
-    } else {
-        return "something went wrong";
-    }
-}
-
-
-
-http.listen(3000, function () {
-    console.log('listening on *:3000');
+  
+http.listen(3011, function(){
+    console.log('listening on *:3011');
 });
